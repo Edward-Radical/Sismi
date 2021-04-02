@@ -68,6 +68,7 @@ void loop() {
 
     active_mode();
     epochTime = getTime();
+    gps();
     Serial.println(epochTime);
 
     if (!client.connected()) {

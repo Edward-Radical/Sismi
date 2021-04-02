@@ -18,3 +18,7 @@
 //TIMESTAMP
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+
+//GPS
+#include <ESP8266HTTPClient.h>
+#include <Arduino.h>

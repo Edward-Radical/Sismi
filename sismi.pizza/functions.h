@@ -203,3 +203,27 @@ unsigned long getTime(){
   unsigned long now = timeClient.getEpochTime();
   return now;
 }//end getTime
+
+//------ GPS ------
+void gps(){
+  
+    //Declare an object of class HTTPClient
+    HTTPClient http;  
+
+    //Specify request destination and fields
+    http.begin("http://api.ipstack.com/check?access_key=233bf289dff160082dd3e5d915ce3135&fields=latitude,longitude");  
+    int httpCode = http.GET();                                  //Send the request
+
+    //Check the returning code
+    if (httpCode > 0) { 
+ 
+      String payload = http.getString();   //Get the request response payload
+      //Print the response payload
+      Serial.println(payload);  
+    }
+ 
+    http.end();   //Close connection
+ 
+  }
+  
+}
