@@ -224,6 +224,4 @@ void gps(){
  
     http.end();   //Close connection
  
-  }
-  
-}
+}//end of GPS
