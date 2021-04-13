@@ -10,6 +10,17 @@ int16_t AcX, AcY, AcZ;
 #include <ArduinoJson.h> // version 6.17.2
 #define BUFFER 1024
 
+int battery;
+int id = 1;
+
+String GPS;
+
+String latitudine;
+String longitudine;
+
+float lati;
+float longi;
+
 
 //IP adress Raspberry Pi and MQTT Conf.
 //const char* mqttServer = "raspi-hyperink";
@@ -44,6 +55,9 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
 //NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 unsigned long epochTime;
+
+//GPS
+String payload;
 
 
 //------ FUNCTIONS ------
@@ -139,7 +153,7 @@ void http_publish(){
     while (true) yield();
   }else {
 
-    const size_t capacity = JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4);
+    const size_t capacity = JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4);
     DynamicJsonDocument doc(capacity);
     DynamicJsonDocument globalDoc(capacity);
     String jsonLine;
@@ -151,6 +165,13 @@ void http_publish(){
         if (!error) globalDoc.add(localDoc);
     }
 
+    JsonObject Info = doc.createNestedObject("Info");
+    Info["Battery"] = battery;
+    Info["ID"] = id;
+    Info["Latitudine"] = latitudine;
+    Info["Longitudine"] = longitudine;
+
+    
     JsonArray data = doc.createNestedArray("Data"); 
     data.add(globalDoc);
 
@@ -260,9 +281,23 @@ void gps(){
     //Check the returning code
     if (httpCode > 0) { 
       //Get the request response payload
-      String payload = http.getString(); 
+      payload = http.getString(); 
       //Print the response payload
-      Serial.println(payload);  
+      Serial.println(payload); 
+
+      DynamicJsonDocument doc(512);
+      DeserializationError error = deserializeJson(doc, payload);
+      
+      
+      lati  = doc["latitude"];
+      longi = doc["longitude"];
+
+     
+      latitudine = String(lati, 2);
+      longitudine = String(longi, 2);
+      Serial.println(latitudine);
+      Serial.println(longitudine);
+      
     }
     //Close connection
     http.end();  
