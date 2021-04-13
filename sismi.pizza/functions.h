@@ -8,13 +8,12 @@ int16_t AcX, AcY, AcZ;
 
 //JSON CONF
 #include <ArduinoJson.h> // version 6.17.2
-#define MQTT_BUFFER 1024
-
+#define BUFFER 1024
 
 
 //IP adress Raspberry Pi and MQTT Conf.
-const char* mqttServer = "raspi-hyperink";
-const int mqttPort = 1883;
+//const char* mqttServer = "raspi-hyperink";
+//const int mqttPort = 1883;
 
 //const char* mqttServer = "broker.mqtt-dashboard.com";
 //const int mqttPort = 1883;
@@ -27,7 +26,7 @@ String header;
 
 //Client
 WiFiClient espClient;
-PubSubClient client(espClient);
+//PubSubClient client(espClient);
 
 //TIMER
 unsigned long timer_save = 3000;
@@ -78,23 +77,23 @@ void saveHistory(){
     return;
   }
   
-  StaticJsonDocument<MQTT_BUFFER> doc;
+  StaticJsonDocument<BUFFER> doc;
   doc["AcX"] = AcX;
   doc["AcY"] = AcY;
   doc["AcZ"] = AcZ;
   doc["time"] = epochTime;
 
   //Uncomment these if you want to store values as array
-  //StaticJsonDocument<MQTT_BUFFER> doc;
+  //StaticJsonDocument<BUFFER> doc;
   //doc.add(AcX);
   //doc.add(AcY);
   //doc.add(AcZ);
   //doc.add(start_time);
 
-  char mqttData[MQTT_BUFFER];
-  serializeJson(doc, mqttData);
+  char Data[BUFFER];
+  serializeJson(doc, Data);
 
-  file.println(mqttData);
+  file.println(Data);
   file.close();  
 }//end saveHistory
 
@@ -127,9 +126,9 @@ void read_data(){
    
 }//end read_data
 
-
-//------  MQTT Publish -------
-void mqtt_publish(){
+//------ HTTP Publish ------
+void http_publish(){
+  
   File file = LittleFS.open("/file.txt", "r");
   if(!file){
     Serial.println("file open failed");
@@ -150,52 +149,91 @@ void mqtt_publish(){
 
     JsonArray data = doc.createNestedArray("Data"); 
     data.add(globalDoc);
-          
+
+    HTTPClient http;
+    //Send request
+    http.begin("http://raspi-hyperink:1880/postjdoc");
     char buffer[capacity];
     size_t n = serializeJson(doc, buffer);
-    int ret = client.publish("esp8266/JSON", buffer, n); 
+    
+    http.POST(buffer);
     Serial.println(buffer);
-    //globalDoc.clear();
+    http.end();
     file.close();
-  }
-}//end mqtt_publish
+     
+  }  
+}//end http_publish
 
-void callback(char* topic, byte* payload, unsigned int length) {
 
-  Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
-  Serial.print("Message:");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println();
-  Serial.println("-----------------------"); 
-}//end callback
+//------  MQTT Publish -------
+//void mqtt_publish(){
+//  File file = LittleFS.open("/file.txt", "r");
+//  if(!file){
+//    Serial.println("file open failed");
+//    while (true) yield();
+//  }else {
+//
+//    const size_t capacity = JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4);
+//    DynamicJsonDocument doc(capacity);
+//    DynamicJsonDocument globalDoc(capacity);
+//    String jsonLine;
+//    jsonLine.reserve(capacity);
+//    StaticJsonDocument <capacity> localDoc;
+//    while (file.available()) {
+//        jsonLine = file.readStringUntil('\n');
+//        DeserializationError error = deserializeJson(localDoc, jsonLine);
+//        if (!error) globalDoc.add(localDoc);
+//    }
+//
+//    JsonArray data = doc.createNestedArray("Data"); 
+//    data.add(globalDoc);
+//          
+//    char buffer[capacity];
+//    size_t n = serializeJson(doc, buffer);
+//    int ret = client.publish("esp8266/JSON", buffer, n); 
+//    Serial.println(buffer);
+//    //globalDoc.clear();
+//    file.close();
+//  }
+//}//end mqtt_publish
+
+//Uncomment if you use MQTT
+//void callback(char* topic, byte* payload, unsigned int length) {
+//
+//  Serial.print("Message arrived in topic: ");
+//  Serial.println(topic);
+//  Serial.print("Message:");
+//  for (int i = 0; i < length; i++) {
+//    Serial.print((char)payload[i]);
+//  }
+//  Serial.println();
+//  Serial.println("-----------------------"); 
+//}//end callback
 
 //------ RECONNECT FUNCTION ------
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.println("Attempting MQTT connection...");
-    // Attempt to connect
-    if (client.connect("esp8266/JSON")) {
-        Serial.print("Connected to topic: ");
-        Serial.println("esp8266/JSON");
-        
-        // Once connected, publish an announcement...
-        //client.publish("outTopic", "hello world");
-        // ... and resubscribe
-        //client.subscribe("inTopic");
-        client.subscribe("esp8266/JSON");
-    } else {
-        Serial.print("failed, rc=");
-        Serial.print(client.state());
-        Serial.println(" try again in 5 seconds");
-        // Wait 5 seconds before retrying
-        delay(5000);
-      }
-  }
-}//end reconnect
+//void reconnect() {
+//  // Loop until we're reconnected
+//  while (!client.connected()) {
+//    Serial.println("Attempting MQTT connection...");
+//    // Attempt to connect
+//    if (client.connect("esp8266/JSON")) {
+//        Serial.print("Connected to topic: ");
+//        Serial.println("esp8266/JSON");
+//        
+//        // Once connected, publish an announcement...
+//        //client.publish("outTopic", "hello world");
+//        // ... and resubscribe
+//        //client.subscribe("inTopic");
+//        client.subscribe("esp8266/JSON");
+//    } else {
+//        Serial.print("failed, rc=");
+//        Serial.print(client.state());
+//        Serial.println(" try again in 5 seconds");
+//        // Wait 5 seconds before retrying
+//        delay(5000);
+//      }
+//  }
+//}//end reconnect
 
 //------ TIMESTAMP ------
 unsigned long getTime(){
@@ -212,16 +250,17 @@ void gps(){
 
     //Specify request destination and fields
     http.begin("http://api.ipstack.com/check?access_key=233bf289dff160082dd3e5d915ce3135&fields=latitude,longitude");  
-    int httpCode = http.GET();                                  //Send the request
+    //Send the request
+    int httpCode = http.GET();                                  
 
     //Check the returning code
     if (httpCode > 0) { 
- 
-      String payload = http.getString();   //Get the request response payload
+      //Get the request response payload
+      String payload = http.getString(); 
       //Print the response payload
       Serial.println(payload);  
     }
- 
-    http.end();   //Close connection
+    //Close connection
+    http.end();  
  
 }//end of GPS
