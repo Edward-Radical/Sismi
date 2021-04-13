@@ -25,8 +25,8 @@ void setup() {
   Serial.println("Connected.");
 
   //CLIENT
-  client.setServer(mqttServer, mqttPort);
-  client.setCallback(callback);
+  //client.setServer(mqttServer, mqttPort);
+  //client.setCallback(callback);
   //client.setBufferSize(9000);
   server.begin();
 
@@ -70,14 +70,14 @@ void loop() {
     epochTime = getTime();
     gps();
     Serial.println(epochTime);
+    
+// Uncomment if you use MQTT
+//    if (!client.connected()) {
+//            reconnect();
+//          }
+//    client.loop();
 
-    if (!client.connected()) {
-            reconnect();
-          }
-    client.loop();
-
-    //readHistory();
-    mqtt_publish();
+    http_publish();
     
     LittleFS.remove("/file.txt");
      
