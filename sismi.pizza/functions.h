@@ -35,10 +35,14 @@ unsigned long ora;
 const unsigned long Minutes = 1 * 60 * 1000UL;
 
 //TIMESTAMP
-const long utcOffsetInSeconds = 3600;
+//uncomment utcOffsetInSeconds if you need
+// to set the time in your local zone
+//const long utcOffsetInSeconds = 3600;
+
 //define ntp client to get time
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
+//NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 unsigned long epochTime;
 
 
