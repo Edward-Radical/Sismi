@@ -1,5 +1,6 @@
 #include "library.h"
 #include "functions.h"
+#include "memory.h"
 
 unsigned long count = 0;
 
@@ -23,11 +24,6 @@ void setup() {
   WiFiManager wifiManager;
   wifiManager.autoConnect("AutoConnectAP");
   Serial.println("Connected.");
-
-  //CLIENT
-  //client.setServer(mqttServer, mqttPort);
-  //client.setCallback(callback);
-  //client.setBufferSize(9000);
   server.begin();
 
   //MOUNTING FILE SYSTEM
@@ -38,6 +34,57 @@ void setup() {
     Serial.println("Error mounting file system");
     return;
   }
+
+  //Checking Info
+  // To format all space in LittleFS
+    // LittleFS.format()
+  
+    // Get all information of your LittleFS
+    FSInfo fs_info;
+    LittleFS.info(fs_info);
+  
+    Serial.println("File sistem info.");
+  
+    Serial.print("Total space:      ");
+    Serial.print(fs_info.totalBytes);
+    Serial.println("byte");
+  
+    Serial.print("Total space used: ");
+    Serial.print(fs_info.usedBytes);
+    Serial.println("byte");
+  
+    Serial.print("Block size:       ");
+    Serial.print(fs_info.blockSize);
+    Serial.println("byte");
+  
+    Serial.print("Page size:        ");
+    Serial.print(fs_info.totalBytes);
+    Serial.println("byte");
+  
+    Serial.print("Max open files:   ");
+    Serial.println(fs_info.maxOpenFiles);
+  
+    Serial.print("Max path lenght:  ");
+    Serial.println(fs_info.maxPathLength);
+  
+    Serial.println();
+  
+    // Open dir folder
+    Dir dir = LittleFS.openDir("/");
+    // Cycle all the content
+    while (dir.next()) {
+        // get filename
+        Serial.print(dir.fileName());
+        Serial.print(" - ");
+        // If element have a size display It else write 0
+        if(dir.fileSize()) {
+            File f = dir.openFile("r");
+            Serial.println(f.size());
+            f.close();
+        }else{
+            Serial.println("0");
+        }
+    }  
 
   //TIMESTAMP in seconds
   epochTime = getTime();
@@ -62,25 +109,17 @@ void loop() {
   }
      
   //Publish data in topic and clear file.txt
-  if (count == 10){
+  if (count == 30){
 
     count = 0;
 
     active_mode();
     epochTime = getTime();
     gps();
-    Serial.println(epochTime);
-    
-// Uncomment if you use MQTT
-//    if (!client.connected()) {
-//            reconnect();
-//          }
-//    client.loop();
-
-    http_publish();
+    getBatteryVoltage();
+    httpPublish();
     
     LittleFS.remove("/file.txt");
-     
     sleep_mode();
   }
 }//end of void loop();

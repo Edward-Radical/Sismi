@@ -1,5 +1,12 @@
 //------ HEADER ------
 
+// Battery voltage resistance
+#define BAT_RES_VALUE_VCC 12.0
+#define BAT_RES_VALUE_GND 20.0
+
+float batVolt;
+String batteria;
+
 unsigned long samples = 10; 
 
 //MPU
@@ -21,14 +28,6 @@ String longitudine;
 float lati;
 float longi;
 
-
-//IP adress Raspberry Pi and MQTT Conf.
-//const char* mqttServer = "raspi-hyperink";
-//const int mqttPort = 1883;
-
-//const char* mqttServer = "broker.mqtt-dashboard.com";
-//const int mqttPort = 1883;
-
 // Set web server port number to 80
 WiFiServer server(80);
 
@@ -37,13 +36,12 @@ String header;
 
 //Client
 WiFiClient espClient;
-//PubSubClient client(espClient);
 
 //TIMER
 unsigned long timer_save = 3000;
 unsigned long start_time;
 unsigned long ora;
-const unsigned long Minutes = 1 * 60 * 1000UL;
+const unsigned long Minutes = 2 * 60 * 1000UL;
 
 //TIMESTAMP
 //uncomment utcOffsetInSeconds if you need
@@ -87,49 +85,6 @@ void sleep_mode(){
 }//end sleep_mode
 
 
-//------ SPIFFS ------
-void saveHistory(){
-  File file = LittleFS.open("/file.txt", "a");
-  if (!file) {
-    Serial.println("Error opening file for writing");
-    return;
-  }
-  
-  StaticJsonDocument<BUFFER> doc;
-  doc["AcX"] = AcX;
-  doc["AcY"] = AcY;
-  doc["AcZ"] = AcZ;
-  doc["time"] = epochTime;
-
-  //Uncomment these if you want to store values as array
-  //StaticJsonDocument<BUFFER> doc;
-  //doc.add(AcX);
-  //doc.add(AcY);
-  //doc.add(AcZ);
-  //doc.add(start_time);
-
-  char Data[BUFFER];
-  serializeJson(doc, Data);
-
-  file.println(Data);
-  file.close();  
-}//end saveHistory
-
-void readHistory(){
-  File file = LittleFS.open("/file.txt", "r");
-  if(!file){
-    Serial.println("File open failed");
-  } Serial.println("------ Reading ------");
-
-  for (int i=0; i<samples; i++){
-    String s = file.readStringUntil('\n');
-    Serial.print(i);
-    Serial.print(":");
-    Serial.println(s);
-  }
-}//end readHistory
-
-
 //------ Read Data from MPU ------
 void read_data(){
 
@@ -145,120 +100,66 @@ void read_data(){
 }//end read_data
 
 //------ HTTP Publish ------
-void http_publish(){
+void httpPublish(){
+
+  const char * outputFileNames[] = {"/out1.txt", "/out2.txt", "/out3.txt"};
+  const byte outputCount = sizeof outputFileNames / sizeof outputFileNames[0];
+  byte outputIndex = 0;
   
-  File file = LittleFS.open("/file.txt", "r");
-  if(!file){
-    Serial.println("file open failed");
-    while (true) yield();
-  }else {
+  File sourceFile;
+  File destinationFile;
+  
+  
+  //const size_t capacity = JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(30) + 30*JSON_OBJECT_SIZE(4);
+  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument globalDoc(4096);
+  StaticJsonDocument <1000> localDoc;
 
-    const size_t capacity = JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4);
-    DynamicJsonDocument doc(capacity);
-    DynamicJsonDocument globalDoc(capacity);
-    String jsonLine;
-    jsonLine.reserve(capacity);
-    StaticJsonDocument <capacity> localDoc;
-    while (file.available()) {
-        jsonLine = file.readStringUntil('\n');
-        DeserializationError error = deserializeJson(localDoc, jsonLine);
-        if (!error) globalDoc.add(localDoc);
-    }
+  String aLine;
+  aLine.reserve(1024);
 
-    JsonObject Info = doc.createNestedObject("Info");
-    Info["Battery"] = battery;
-    Info["ID"] = id;
-    Info["Latitudine"] = latitudine;
-    Info["Longitudine"] = longitudine;
+  for (byte idx = 0; idx < outputCount; idx++) {
+      destinationFile = LittleFS.open(outputFileNames[idx], "r");
+      if (!destinationFile) {
+        Serial.print(F("can't open destination "));
+        Serial.println(outputFileNames[idx]);
+        break;
+      } else {
+        Serial.print("Reading: ");
+        Serial.println(outputFileNames[idx]);
+        //int lineCount = 0;
+        while (destinationFile.available()) {
+          aLine = destinationFile.readStringUntil('\n');
+          DeserializationError error = deserializeJson(localDoc, aLine);
+          if (!error) globalDoc.add(localDoc);  
+          else{ Serial.println("Error Writing All files");}
+        }//while
 
+        JsonObject Info = doc.createNestedObject("Info");
+        Info["Battery"] = battery;
+        Info["ID"] = id;
+        Info["Latitudine"] = latitudine;
+        Info["Longitudine"] = longitudine;
     
-    JsonArray data = doc.createNestedArray("Data"); 
-    data.add(globalDoc);
-
-    HTTPClient http;
-    //Send request
-    http.begin("http://raspi-hyperink:1880/postjdoc");
-    char buffer[capacity];
-    size_t n = serializeJson(doc, buffer);
+        
+        JsonArray Data = doc.createNestedArray("Data"); 
+        Data.add(globalDoc);
     
-    http.POST(buffer);
-    Serial.println(buffer);
-    http.end();
-    file.close();
-     
-  }  
-}//end http_publish
-
-
-//------  MQTT Publish -------
-//void mqtt_publish(){
-//  File file = LittleFS.open("/file.txt", "r");
-//  if(!file){
-//    Serial.println("file open failed");
-//    while (true) yield();
-//  }else {
-//
-//    const size_t capacity = JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4);
-//    DynamicJsonDocument doc(capacity);
-//    DynamicJsonDocument globalDoc(capacity);
-//    String jsonLine;
-//    jsonLine.reserve(capacity);
-//    StaticJsonDocument <capacity> localDoc;
-//    while (file.available()) {
-//        jsonLine = file.readStringUntil('\n');
-//        DeserializationError error = deserializeJson(localDoc, jsonLine);
-//        if (!error) globalDoc.add(localDoc);
-//    }
-//
-//    JsonArray data = doc.createNestedArray("Data"); 
-//    data.add(globalDoc);
-//          
-//    char buffer[capacity];
-//    size_t n = serializeJson(doc, buffer);
-//    int ret = client.publish("esp8266/JSON", buffer, n); 
-//    Serial.println(buffer);
-//    //globalDoc.clear();
-//    file.close();
-//  }
-//}//end mqtt_publish
-
-//Uncomment if you use MQTT
-//void callback(char* topic, byte* payload, unsigned int length) {
-//
-//  Serial.print("Message arrived in topic: ");
-//  Serial.println(topic);
-//  Serial.print("Message:");
-//  for (int i = 0; i < length; i++) {
-//    Serial.print((char)payload[i]);
-//  }
-//  Serial.println();
-//  Serial.println("-----------------------"); 
-//}//end callback
-
-//------ RECONNECT FUNCTION ------
-//void reconnect() {
-//  // Loop until we're reconnected
-//  while (!client.connected()) {
-//    Serial.println("Attempting MQTT connection...");
-//    // Attempt to connect
-//    if (client.connect("esp8266/JSON")) {
-//        Serial.print("Connected to topic: ");
-//        Serial.println("esp8266/JSON");
-//        
-//        // Once connected, publish an announcement...
-//        //client.publish("outTopic", "hello world");
-//        // ... and resubscribe
-//        //client.subscribe("inTopic");
-//        client.subscribe("esp8266/JSON");
-//    } else {
-//        Serial.print("failed, rc=");
-//        Serial.print(client.state());
-//        Serial.println(" try again in 5 seconds");
-//        // Wait 5 seconds before retrying
-//        delay(5000);
-//      }
-//  }
-//}//end reconnect
+        HTTPClient http;
+        //Send request
+        http.begin("http://raspi-hyperink:1880/postjdoc");
+        char buffer[4096];
+        size_t n = serializeJson(doc, buffer);
+        
+        http.POST(buffer);
+        Serial.println(buffer);
+        http.end();
+        destinationFile.close();
+        globalDoc.clear();
+        localDoc.clear();
+      }
+    }// end for   
+}//end httpPublish
 
 //------ TIMESTAMP ------
 unsigned long getTime(){
@@ -288,18 +189,32 @@ void gps(){
       DynamicJsonDocument doc(512);
       DeserializationError error = deserializeJson(doc, payload);
       
-      
       lati  = doc["latitude"];
       longi = doc["longitude"];
-
      
       latitudine = String(lati, 2);
-      longitudine = String(longi, 2);
-      Serial.println(latitudine);
-      Serial.println(longitudine);
-      
+      longitudine = String(longi, 2); 
     }
     //Close connection
     http.end();  
  
 }//end of GPS
+
+float getBatteryVoltage(){
+    //************ Measuring Battery Voltage ***********
+    double sample1 = 0;
+    // Get 100 analog read to prevent unusefully read
+    for (int i = 0; i < 100; i++) {
+        sample1 = sample1 + analogRead(A0); //read the voltage from the divider circuit
+        delay(2);
+    }
+    sample1 = sample1 / 100;
+    // REFERENCE_VCC is reference voltage of microcontroller 3.3v for esp8266 5v Arduino
+    // BAT_RES_VALUE_VCC is the kohm value of R1 resistor
+    // BAT_RES_VALUE_GND is the kohm value of R2 resistor
+    // 1023 is the max digital value of analog read (1024 == Reference voltage)
+    batVolt = (sample1 * 3.3  * (BAT_RES_VALUE_VCC + BAT_RES_VALUE_GND) / BAT_RES_VALUE_GND) / 1023;
+    //float batVolt = sample1 * 5/ 1023;
+    batteria = String(batVolt, 2);
+    Serial.println(batteria);
+}
