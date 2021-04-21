@@ -105,7 +105,7 @@ void loop() {
       saveHistory();
       start_time = ora;
       count++;
-      epochTime = epochTime + 3000;
+      epochTime = epochTime + 3;
   }
      
   //Publish data in topic and clear file.txt

@@ -45,13 +45,13 @@ const unsigned long Minutes = 2 * 60 * 1000UL;
 
 //TIMESTAMP
 //uncomment utcOffsetInSeconds if you need
-// to set the time in your local zone
-//const long utcOffsetInSeconds = 3600;
+//to set the time in your local zone
+const long utcOffsetInSeconds = 7200;
 
 //define ntp client to get time
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org");
-//NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
+//NTPClient timeClient(ntpUDP, "pool.ntp.org");
+NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 unsigned long epochTime;
 
 //GPS
