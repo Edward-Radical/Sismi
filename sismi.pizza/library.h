@@ -22,3 +22,6 @@
 //GPS
 #include <ESP8266HTTPClient.h>
 #include <Arduino.h>
+
+//JSON
+#include <ArduinoJson.h> // version 6.17.2

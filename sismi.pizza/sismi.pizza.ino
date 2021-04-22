@@ -38,6 +38,8 @@ void setup() {
   //Checking Info
   // To format all space in LittleFS
     // LittleFS.format()
+
+    LittleFS.remove("/file.txt");
   
     // Get all information of your LittleFS
     FSInfo fs_info;
@@ -88,9 +90,7 @@ void setup() {
 
   //TIMESTAMP in seconds
   epochTime = getTime();
-  Serial.println(epochTime);
-  delay(1000);
-
+  
   //TURN OFF WIFI
   sleep_mode();
 
@@ -108,8 +108,8 @@ void loop() {
       epochTime = epochTime + 3;
   }
      
-  //Publish data in topic and clear file.txt
-  if (count == 30){
+  //Publish data and clear file.txt
+  if (count == 101){
 
     count = 0;
 
@@ -117,6 +117,9 @@ void loop() {
     epochTime = getTime();
     gps();
     getBatteryVoltage();
+    WritePacks();
+    ReadPacks();
+    //readHistory();
     httpPublish();
     
     LittleFS.remove("/file.txt");
