@@ -1,5 +1,12 @@
 //------ HEADER ------
 
+#include "memory.h"
+
+//JSON CONF
+//#include <ArduinoJson.h> // version 6.17.2
+#define BUFFER 1024
+const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4) + 10;
+
 // Battery voltage resistance
 #define BAT_RES_VALUE_VCC 12.0
 #define BAT_RES_VALUE_GND 20.0
@@ -7,15 +14,11 @@
 float batVolt;
 String batteria;
 
-unsigned long samples = 10; 
+unsigned long samples = 100; 
 
 //MPU
 const int MPU = 0x68; // I2C address of the MPU-6050
 int16_t AcX, AcY, AcZ;
-
-//JSON CONF
-#include <ArduinoJson.h> // version 6.17.2
-#define BUFFER 1024
 
 int battery;
 int id = 1;
@@ -41,7 +44,7 @@ WiFiClient espClient;
 unsigned long timer_save = 3000;
 unsigned long start_time;
 unsigned long ora;
-const unsigned long Minutes = 2 * 60 * 1000UL;
+const unsigned long Minutes = 5 * 60 * 1000UL;
 
 //TIMESTAMP
 //uncomment utcOffsetInSeconds if you need
@@ -65,6 +68,7 @@ String payload;
 void active_mode(){
   if(WiFi.status() != WL_CONNECTED){
     WiFi.forceSleepWake();
+    delay(1);
     
     // WiFiManager
     WiFiManager wifiManager;
@@ -75,13 +79,15 @@ void active_mode(){
 }//end active_mode
 
 void sleep_mode(){
+  //WiFi.disconnect();
   WiFi.forceSleepBegin();
   if(WiFi.status() != WL_CONNECTED){
     Serial.print(WiFi.status());
     Serial.println(" :WiFi Off");
   }
   //sleep time in ms
-  delay(Minutes + 1);
+  //delay(Minutes + 1);
+  delay(1);
 }//end sleep_mode
 
 
@@ -102,23 +108,24 @@ void read_data(){
 //------ HTTP Publish ------
 void httpPublish(){
 
-  const char * outputFileNames[] = {"/out1.txt", "/out2.txt", "/out3.txt"};
+  const char * outputFileNames[] = {"/out1.txt", "/out2.txt", "/out3.txt", "/out4.txt", "/out5.txt", "/out6.txt", "/out7.txt", "/out8.txt", "/out9.txt", "/out10.txt"};
   const byte outputCount = sizeof outputFileNames / sizeof outputFileNames[0];
   byte outputIndex = 0;
   
   File sourceFile;
   File destinationFile;
   
+  //Serial.println(capacity);
   
-  //const size_t capacity = JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(30) + 30*JSON_OBJECT_SIZE(4);
-  DynamicJsonDocument doc(4096);
-  DynamicJsonDocument globalDoc(4096);
-  StaticJsonDocument <1000> localDoc;
-
-  String aLine;
-  aLine.reserve(1024);
 
   for (byte idx = 0; idx < outputCount; idx++) {
+
+      DynamicJsonDocument doc(capacity);
+      DynamicJsonDocument globalDoc(capacity);
+      StaticJsonDocument <1024> localDoc;
+      String aLine;
+      aLine.reserve(capacity);
+      
       destinationFile = LittleFS.open(outputFileNames[idx], "r");
       if (!destinationFile) {
         Serial.print(F("can't open destination "));
@@ -127,10 +134,11 @@ void httpPublish(){
       } else {
         Serial.print("Reading: ");
         Serial.println(outputFileNames[idx]);
-        //int lineCount = 0;
-        while (destinationFile.available()) {
+        int lineCount = 0;
+        while (destinationFile.available() && (lineCount < 10)) {
           aLine = destinationFile.readStringUntil('\n');
           DeserializationError error = deserializeJson(localDoc, aLine);
+          lineCount++;
           if (!error) globalDoc.add(localDoc);  
           else{ Serial.println("Error Writing All files");}
         }//while
@@ -148,15 +156,17 @@ void httpPublish(){
         HTTPClient http;
         //Send request
         http.begin("http://raspi-hyperink:1880/postjdoc");
-        char buffer[4096];
+        char buffer[capacity];
         size_t n = serializeJson(doc, buffer);
         
         http.POST(buffer);
         Serial.println(buffer);
         http.end();
         destinationFile.close();
-        globalDoc.clear();
-        localDoc.clear();
+
+        Serial.printf_P(PSTR("free heap memory: %d\n"), ESP.getFreeHeap());
+        //doc.~BasicJsonDocument();
+        Serial.printf_P(PSTR("free heap memory: %d\n"), ESP.getFreeHeap());
       }
     }// end for   
 }//end httpPublish
@@ -218,3 +228,111 @@ float getBatteryVoltage(){
     batteria = String(batVolt, 2);
     Serial.println(batteria);
 }
+
+//------ VAR & CONST ------
+
+const char * outputFileNames[] = {"/out1.txt", "/out2.txt", "/out3.txt", "/out4.txt", "/out5.txt", "/out6.txt", "/out7.txt", "/out8.txt", "/out9.txt", "/out10.txt"};
+const byte outputCount = sizeof outputFileNames / sizeof outputFileNames[0];
+byte outputIndex = 0;
+
+File sourceFile;
+File destinationFile;
+
+//------ SPIFFS ------
+void saveHistory(){
+  File file = LittleFS.open("/file.txt", "a");
+  if (!file) {
+    Serial.println("Error opening file for writing");
+    return;
+  }
+  
+  StaticJsonDocument <BUFFER> doc;
+  doc["AcX"] = AcX;
+  doc["AcY"] = AcY;
+  doc["AcZ"] = AcZ;
+  doc["time"] = epochTime;
+
+  //Uncomment these if you want to store values as array
+  //StaticJsonDocument<BUFFER> doc;
+  //doc.add(AcX);
+  //doc.add(AcY);
+  //doc.add(AcZ);
+  //doc.add(start_time);
+
+  char Data[BUFFER];
+  serializeJson(doc, Data);
+
+  file.println(Data);
+  file.close();  
+}//end saveHistory
+
+void readHistory(){
+  File file = LittleFS.open("/file.txt", "r");
+  if(!file){
+    Serial.println("File open failed");
+  } Serial.println("------ Reading ------");
+
+  for (int i=0; i<=samples; i++){
+    String s = file.readStringUntil('\n');
+    Serial.print(i);
+    Serial.print(":");
+    Serial.println(s);
+  }
+}//end readHistory
+
+void WritePacks() {
+  
+  sourceFile = LittleFS.open("/file.txt", "r");
+  if (!sourceFile) {
+    Serial.println(F("Error: file.txt open failed"));
+  } else {
+    Serial.println("File open w/ success");
+    for (byte idx = 0; idx < outputCount; idx++) {
+      String aLine;
+      aLine.reserve(capacity);
+      if (sourceFile.available() == 0) break;
+      destinationFile = LittleFS.open(outputFileNames[idx], "w");
+      if (!destinationFile) {
+        Serial.print(F("can't open destination "));
+        Serial.println(outputFileNames[idx]);
+        break;
+      } else {
+        int lineCount = 0;
+        while (sourceFile.available() && (lineCount < 10)) {
+          aLine = sourceFile.readStringUntil('\n');
+          destinationFile.println(aLine); // double check if the '\n' is in the String or not (--> print or println accordingly)
+          lineCount++;
+        }
+        outputIndex = idx;
+        Serial.println(outputIndex);
+        destinationFile.close();
+      }
+    } // end for
+    sourceFile.close();
+  }
+}//end WritePacks
+
+//Use this just to check if the packages were written
+void ReadPacks(){
+
+  String aLine;
+  aLine.reserve(capacity);
+
+  for (byte idx = 0; idx < outputCount; idx++) {
+      destinationFile = LittleFS.open(outputFileNames[idx], "r");
+      if (!destinationFile) {
+        Serial.print(F("can't open destination "));
+        Serial.println(outputFileNames[idx]);
+        break;
+      } else {
+        Serial.print("Reading: ");
+        Serial.println(outputFileNames[idx]);
+        //int lineCount = 0;
+        while (destinationFile.available()) {
+          aLine = destinationFile.readStringUntil('\n');
+          Serial.println(aLine);   
+        }//while
+        destinationFile.close();
+      }
+    }// end for 
+}//end ReadPacks 
