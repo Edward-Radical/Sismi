@@ -7,10 +7,6 @@
 //MPU
 #include<Wire.h>
 
-//Client
-#include <PubSubClient.h>
-#define MQTT_KEEPALIVE 300
-
 //ESP MEMORY
 #include "LittleFS.h" // LittleFS is declared
 #include "FS.h" // SPIFFS is declared
@@ -18,6 +14,7 @@
 //TIMESTAMP
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <TimeLib.h>
 
 //GPS
 #include <ESP8266HTTPClient.h>

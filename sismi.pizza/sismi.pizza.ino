@@ -1,8 +1,6 @@
 #include "library.h"
 #include "functions.h"
-#include "memory.h"
 
-unsigned long count = 0;
 
 void setup() {
 
@@ -90,6 +88,8 @@ void setup() {
 
   //TIMESTAMP in seconds
   epochTime = getTime();
+  //Get Time in hour
+  get_threshold_c();
   
   //TURN OFF WIFI
   sleep_mode();
@@ -98,33 +98,24 @@ void setup() {
 
 void loop() {
 
-  //Read data every 3 seconds and save them in file.txt
-  ora = millis();    
-  if (ora - start_time >= timer_save){ 
-      read_data();
-      saveHistory();
-      start_time = ora;
-      count++;
-      epochTime = epochTime + 3;
-  }
-     
-  //Publish data and clear file.txt
-  if (count == 101){
+  //Get Timer
+  ora = millis(); 
 
-    count = 0;
+  if(threshold_c >= threshold_1 && threshold_c < threshold_2 ){
+    //Send data every 3 seconds (tot. 100)
+    read_every(3000, 3);
+  }  
 
-    active_mode();
-    epochTime = getTime();
-    gps();
-    getBatteryVoltage();
-    WritePacks();
-    ReadPacks();
-    //readHistory();
-    httpPublish();
-    
-    LittleFS.remove("/file.txt");
-    sleep_mode();
+  else if(threshold_c >= threshold_2 && threshold_c < threshold_3){
+    //Send data every 6 seconds (tot. 100)
+    read_every(6000, 6);
+  } 
+  
+  else if(threshold_c >= threshold_3 && threshold_c < threshold_1){
+  //Send data every 12 seconds (tot. 100)
+  read_every(12000, 12);
   }
+  
 }//end of void loop();
 
   

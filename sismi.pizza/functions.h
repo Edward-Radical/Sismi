@@ -1,11 +1,5 @@
 //------ HEADER ------
-
-#include "memory.h"
-
-//JSON CONF
-//#include <ArduinoJson.h> // version 6.17.2
-#define BUFFER 1024
-const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4) + 10;
+//------ HEADER ------
 
 // Battery voltage resistance
 #define BAT_RES_VALUE_VCC 12.0
@@ -14,37 +8,13 @@ const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(4) + JSON_ARRAY_S
 float batVolt;
 String batteria;
 
-unsigned long samples = 100; 
-
-//MPU
-const int MPU = 0x68; // I2C address of the MPU-6050
-int16_t AcX, AcY, AcZ;
-
-int battery;
-int id = 1;
-
+//GPS
 String GPS;
-
 String latitudine;
 String longitudine;
-
 float lati;
 float longi;
-
-// Set web server port number to 80
-WiFiServer server(80);
-
-// Variable to store the HTTP request
-String header;
-
-//Client
-WiFiClient espClient;
-
-//TIMER
-unsigned long timer_save = 3000;
-unsigned long start_time;
-unsigned long ora;
-const unsigned long Minutes = 5 * 60 * 1000UL;
+String payload;
 
 //TIMESTAMP
 //uncomment utcOffsetInSeconds if you need
@@ -57,9 +27,42 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 unsigned long epochTime;
 
-//GPS
-String payload;
 
+//BATTERY
+int threshold_1 = 7;
+int threshold_2 = 16;
+int threshold_3 = 21;
+
+int threshold_c;
+
+int battery;
+
+//JSON CONF
+//#include <ArduinoJson.h> // version 6.17.2
+#define BUFFER 1024
+const size_t capacity = JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(4) + JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(10) + 10*JSON_OBJECT_SIZE(4) + 10;
+
+unsigned long samples = 100; 
+unsigned long count = 0;
+
+//MPU
+const int MPU = 0x68; // I2C address of the MPU-6050
+int16_t AcX, AcY, AcZ;
+int id = 1;
+
+
+// Set web server port number to 80
+WiFiServer server(80);
+
+// Variable to store the HTTP request
+String header;
+
+//Client
+WiFiClient espClient;
+
+//TIMER
+unsigned long start_time;
+unsigned long ora;
 
 //------ FUNCTIONS ------
 
@@ -92,7 +95,7 @@ void sleep_mode(){
 
 
 //------ Read Data from MPU ------
-void read_data(){
+void read_sensor(){
 
   //MPU reading
   Wire.beginTransmission(MPU);
@@ -115,17 +118,15 @@ void httpPublish(){
   File sourceFile;
   File destinationFile;
   
-  //Serial.println(capacity);
-  
+  DynamicJsonDocument doc(capacity);
+  DynamicJsonDocument globalDoc(capacity);
+  StaticJsonDocument <100> lineDoc;
+  String aLine;
+  aLine.reserve(100);
+
 
   for (byte idx = 0; idx < outputCount; idx++) {
-
-      DynamicJsonDocument doc(capacity);
-      DynamicJsonDocument globalDoc(capacity);
-      StaticJsonDocument <1024> localDoc;
-      String aLine;
-      aLine.reserve(capacity);
-      
+          
       destinationFile = LittleFS.open(outputFileNames[idx], "r");
       if (!destinationFile) {
         Serial.print(F("can't open destination "));
@@ -134,12 +135,15 @@ void httpPublish(){
       } else {
         Serial.print("Reading: ");
         Serial.println(outputFileNames[idx]);
+        doc.clear();
+        globalDoc.clear();
         int lineCount = 0;
-        while (destinationFile.available() && (lineCount < 10)) {
+        
+        while (destinationFile.available()) {
           aLine = destinationFile.readStringUntil('\n');
-          DeserializationError error = deserializeJson(localDoc, aLine);
+          DeserializationError error = deserializeJson(lineDoc, aLine);
           lineCount++;
-          if (!error) globalDoc.add(localDoc);  
+          if (!error) globalDoc.add(lineDoc);  
           else{ Serial.println("Error Writing All files");}
         }//while
 
@@ -157,7 +161,7 @@ void httpPublish(){
         //Send request
         http.begin("http://raspi-hyperink:1880/postjdoc");
         char buffer[capacity];
-        size_t n = serializeJson(doc, buffer);
+        size_t n = serializeJson(doc, buffer, capacity);
         
         http.POST(buffer);
         Serial.println(buffer);
@@ -171,6 +175,45 @@ void httpPublish(){
     }// end for   
 }//end httpPublish
 
+//------ VAR & CONST ------
+
+const char * outputFileNames[] = {"/out1.txt", "/out2.txt", "/out3.txt", "/out4.txt", "/out5.txt", "/out6.txt", "/out7.txt", "/out8.txt", "/out9.txt", "/out10.txt"};
+const byte outputCount = sizeof outputFileNames / sizeof outputFileNames[0];
+byte outputIndex = 0;
+
+File sourceFile;
+File destinationFile;
+
+//------ SPIFFS ------
+//void History(String Path, String Mode){
+//  File main = LittleFS.open(Path, Mode);
+//  if(!main){
+//    Serial.println("Error opening file");
+//    return;
+//  }
+//
+//  if(Mode == "a"){
+//    StaticJsonDocument <BUFFER> doc;
+//    doc["AcX"] = AcX;
+//    doc["AcY"] = AcY;
+//    doc["AcZ"] = AcZ;
+//    doc["time"] = epochTime;
+//  
+//    char Data[BUFFER];
+//    serializeJson(doc, Data);
+//  
+//    file.println(Data);
+//    file.close();
+//  } else if (Mode=="r"){
+//      for (int i=0; i<=samples; i++){
+//        String s = file.readStringUntil('\n');
+//        Serial.print(i);
+//        Serial.print(":");
+//        Serial.println(s);
+//      }//for
+//  }//elif
+//}
+
 //------ TIMESTAMP ------
 unsigned long getTime(){
   timeClient.update();
@@ -178,8 +221,40 @@ unsigned long getTime(){
   return now;
 }//end getTime
 
+//------ THRESHOLD ------
+int get_threshold_c(){
+  
+  epochTime = getTime();
+  threshold_c = hour(epochTime);
+  //int Minutes = minute(epochTime);
+
+  //String Time = String(Hour) + String(Minutes);
+  //Serial.println(Time);
+  return threshold_c;
+}
+
+//------ BATTERY ------
+float getBatteryVoltage(){
+    //************ Measuring Battery Voltage ***********
+    double sample1 = 0;
+    // Get 100 analog read to prevent unusefully read
+    for (int i = 0; i < 100; i++) {
+        sample1 = sample1 + analogRead(A0); //read the voltage from the divider circuit
+        delay(2);
+    }
+    sample1 = sample1 / 100;
+    // REFERENCE_VCC is reference voltage of microcontroller 3.3v for esp8266 5v Arduino
+    // BAT_RES_VALUE_VCC is the kohm value of R1 resistor
+    // BAT_RES_VALUE_GND is the kohm value of R2 resistor
+    // 1023 is the max digital value of analog read (1024 == Reference voltage)
+    batVolt = (sample1 * 3.3  * (BAT_RES_VALUE_VCC + BAT_RES_VALUE_GND) / BAT_RES_VALUE_GND) / 1023;
+    //float batVolt = sample1 * 5/ 1023;
+    batteria = String(batVolt, 2);
+    Serial.println(batteria);
+}
+
 //------ GPS ------
-void gps(){
+void getGps(){
   
     //Declare an object of class HTTPClient
     HTTPClient http;  
@@ -210,35 +285,7 @@ void gps(){
  
 }//end of GPS
 
-float getBatteryVoltage(){
-    //************ Measuring Battery Voltage ***********
-    double sample1 = 0;
-    // Get 100 analog read to prevent unusefully read
-    for (int i = 0; i < 100; i++) {
-        sample1 = sample1 + analogRead(A0); //read the voltage from the divider circuit
-        delay(2);
-    }
-    sample1 = sample1 / 100;
-    // REFERENCE_VCC is reference voltage of microcontroller 3.3v for esp8266 5v Arduino
-    // BAT_RES_VALUE_VCC is the kohm value of R1 resistor
-    // BAT_RES_VALUE_GND is the kohm value of R2 resistor
-    // 1023 is the max digital value of analog read (1024 == Reference voltage)
-    batVolt = (sample1 * 3.3  * (BAT_RES_VALUE_VCC + BAT_RES_VALUE_GND) / BAT_RES_VALUE_GND) / 1023;
-    //float batVolt = sample1 * 5/ 1023;
-    batteria = String(batVolt, 2);
-    Serial.println(batteria);
-}
 
-//------ VAR & CONST ------
-
-const char * outputFileNames[] = {"/out1.txt", "/out2.txt", "/out3.txt", "/out4.txt", "/out5.txt", "/out6.txt", "/out7.txt", "/out8.txt", "/out9.txt", "/out10.txt"};
-const byte outputCount = sizeof outputFileNames / sizeof outputFileNames[0];
-byte outputIndex = 0;
-
-File sourceFile;
-File destinationFile;
-
-//------ SPIFFS ------
 void saveHistory(){
   File file = LittleFS.open("/file.txt", "a");
   if (!file) {
@@ -251,13 +298,6 @@ void saveHistory(){
   doc["AcY"] = AcY;
   doc["AcZ"] = AcZ;
   doc["time"] = epochTime;
-
-  //Uncomment these if you want to store values as array
-  //StaticJsonDocument<BUFFER> doc;
-  //doc.add(AcX);
-  //doc.add(AcY);
-  //doc.add(AcZ);
-  //doc.add(start_time);
 
   char Data[BUFFER];
   serializeJson(doc, Data);
@@ -289,7 +329,7 @@ void WritePacks() {
     Serial.println("File open w/ success");
     for (byte idx = 0; idx < outputCount; idx++) {
       String aLine;
-      aLine.reserve(capacity);
+      aLine.reserve(100);
       if (sourceFile.available() == 0) break;
       destinationFile = LittleFS.open(outputFileNames[idx], "w");
       if (!destinationFile) {
@@ -336,3 +376,32 @@ void ReadPacks(){
       }
     }// end for 
 }//end ReadPacks 
+
+void read_every(unsigned long timer_save, int increment){
+
+  if (ora - start_time >= timer_save){ 
+        read_sensor();
+        //History("a")
+        saveHistory();
+        start_time = ora;
+        count++;
+        epochTime = epochTime + increment;
+        //get_threshold_c();
+  }//if
+
+  if (count == 100){
+  
+    count = 0;
+  
+    active_mode();
+    epochTime = getTime();
+    getGps();
+    getBatteryVoltage();
+    WritePacks();
+    httpPublish();
+    get_threshold_c();
+    
+    LittleFS.remove("/file.txt");
+    sleep_mode();
+  } 
+}//read_every
